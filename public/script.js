@@ -599,6 +599,9 @@ class ChatRoom {
     togglePlay() {
         if (!this.audioPlayer.src) return;
         
+        // 用户手动点击播放按钮时，记录为已交互
+        this.hasUserInteracted = true;
+        
         // 如果是服务器控制的音乐，发送暂停/播放命令到服务器
         if (this.isServerControlled) {
             this.sendMessageToServer(this.isPlaying ? '/pause' : '/play');
@@ -613,6 +616,9 @@ class ChatRoom {
             this.audioPlayer.play().then(() => {
                 this.isPlaying = true;
                 this.musicPlayer.classList.add('playing');
+                // 移除播放按钮的提示效果
+                this.playPauseBtn.style.animation = '';
+                this.playPauseBtn.style.boxShadow = '';
             }).catch(error => {
                 console.error('播放失败:', error);
                 this.showError('播放失败');
@@ -620,6 +626,7 @@ class ChatRoom {
         }
         
         this.updatePlayButton();
+        this.resetAutoHideTimer();
     }
 
     // 更新播放按钮状态
@@ -748,10 +755,21 @@ class ChatRoom {
         
         if (toggleData.isPlaying) {
             this.audioPlayer.currentTime = toggleData.currentTime;
+            
+            // 如果用户还没有交互过，不能自动播放
+            if (!this.hasUserInteracted) {
+                this.pendingPlay = this.currentMusic;
+                this.showNotification('点击播放按钮开始播放', 'warning');
+                this.addPlayButtonPrompt();
+                return;
+            }
+            
             this.audioPlayer.play().then(() => {
                 this.musicPlayer.classList.add('playing');
             }).catch(error => {
                 console.error('切换播放失败:', error);
+                this.showError('播放失败，请手动点击播放按钮');
+                this.addPlayButtonPrompt();
             });
         } else {
             this.audioPlayer.pause();
@@ -759,6 +777,7 @@ class ChatRoom {
         }
         
         this.updatePlayButton();
+        this.resetAutoHideTimer();
     }
 
     // 发送消息的辅助方法
