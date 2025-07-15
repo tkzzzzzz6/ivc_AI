@@ -629,11 +629,65 @@ body {
     margin: 10px 0;
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
 }
 
 .music-player:hover {
     box-shadow: 0 6px 18px rgba(0,0,0,0.2);
     transform: translateY(-2px);
+}
+
+/* 自动隐藏功能 */
+.music-player.auto-hide {
+    opacity: 0.3;
+    transform: translateX(-80%);
+    transition: all 0.3s ease;
+}
+
+.music-player.auto-hide:hover {
+    opacity: 1;
+    transform: translateX(0);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.2);
+}
+
+.music-player.auto-hide .music-info {
+    pointer-events: none;
+}
+
+.music-player.auto-hide:hover .music-info {
+    pointer-events: auto;
+}
+
+/* 迷你模式显示 */
+.music-player.auto-hide .music-controls {
+    opacity: 0;
+    height: 0;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.music-player.auto-hide:hover .music-controls {
+    opacity: 1;
+    height: auto;
+    overflow: visible;
+}
+
+/* 当播放器在自动隐藏状态时，显示迷你指示器 */
+.music-player.auto-hide::before {
+    content: '♪';
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: rgba(255,255,255,0.8);
+    font-size: 18px;
+    animation: pulse 2s infinite;
+    z-index: 10;
+}
+
+.music-player.auto-hide:hover::before {
+    opacity: 0;
 }
 
 .music-info {

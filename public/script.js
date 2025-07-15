@@ -485,9 +485,19 @@ class ChatRoom {
         this.isMuted = false;
         this.currentMusic = null;
         this.isServerControlled = false; // 标记是否被服务器控制
+        this.autoHideTimer = null; // 自动隐藏定时器
+        this.isUserInteracting = false; // 用户是否正在交互
+        this.hasUserInteracted = false; // 用户是否曾经交互过页面
+        this.pendingPlay = null; // 待播放的音乐数据
         
         // 播放器初始状态为隐藏，只有调用/music后才显示
         this.musicPlayer.classList.add('hidden');
+        
+        // 绑定鼠标事件用于自动隐藏
+        this.bindAutoHideEvents();
+        
+        // 监听用户交互以启用自动播放
+        this.setupUserInteractionDetection();
     }
 
     // 绑定音乐播放器事件
@@ -508,6 +518,14 @@ class ChatRoom {
         this.volumeBtn.addEventListener('click', () => {
             this.toggleMute();
         });
+
+        // 关闭播放器按钮
+        const closePlayerBtn = document.getElementById('close-player-btn');
+        if (closePlayerBtn) {
+            closePlayerBtn.addEventListener('click', () => {
+                this.hideMusicPlayer();
+            });
+        }
 
         // 音频事件
         this.audioPlayer.addEventListener('loadedmetadata', () => {
@@ -533,6 +551,9 @@ class ChatRoom {
         this.currentMusic = musicData;
         this.isServerControlled = true;
         
+        // 显示播放器
+        this.showMusicPlayer();
+        
         // 更新界面
         this.musicTitle.textContent = musicData.name || '未知歌曲';
         this.musicArtist.textContent = musicData.artist || '未知艺术家';
@@ -550,31 +571,28 @@ class ChatRoom {
         // 设置音频源
         this.audioPlayer.src = musicData.url;
         
+        // 如果用户还没有交互过页面，等待交互后再播放
+        if (!this.hasUserInteracted) {
+            this.pendingPlay = musicData;
+            this.showNotification('点击页面任意位置开始播放音乐', 'warning');
+            return;
+        }
+        
         // 如果有当前播放时间，跳转到指定位置
         if (musicData.currentTime && musicData.currentTime > 0) {
             this.audioPlayer.addEventListener('loadedmetadata', () => {
                 this.audioPlayer.currentTime = musicData.currentTime;
                 if (musicData.isPlaying) {
-                    this.audioPlayer.play().then(() => {
-                        this.isPlaying = true;
-                        this.updatePlayButton();
-                        this.musicPlayer.classList.add('playing');
-                    }).catch(error => {
-                        console.error('同步播放失败:', error);
-                    });
+                    this.tryAutoPlay();
                 }
             }, { once: true });
         } else {
             // 新音乐自动播放
-            this.audioPlayer.play().then(() => {
-                this.isPlaying = true;
-                this.updatePlayButton();
-                this.musicPlayer.classList.add('playing');
-            }).catch(error => {
-                console.error('自动播放失败:', error);
-                this.showError('自动播放失败，请手动点击播放');
-            });
+            this.tryAutoPlay();
         }
+        
+        // 重置自动隐藏定时器
+        this.resetAutoHideTimer();
     }
 
     // 切换播放/暂停
@@ -664,6 +682,11 @@ class ChatRoom {
         this.musicPlayer.classList.remove('playing');
         this.progressFill.style.width = '0%';
         this.currentTimeDisplay.textContent = '0:00';
+        
+        // 播放结束后5秒自动隐藏播放器
+        setTimeout(() => {
+            this.startAutoHide();
+        }, 5000);
     }
 
     // 停止音乐
@@ -743,6 +766,166 @@ class ChatRoom {
         if (this.socket && this.currentRoom) {
             this.socket.emit('send-message', { message: message });
         }
+    }
+    
+    // === 自动隐藏功能 ===
+    
+    // 绑定自动隐藏相关事件
+    bindAutoHideEvents() {
+        // 鼠标进入播放器区域
+        this.musicPlayer.addEventListener('mouseenter', () => {
+            this.isUserInteracting = true;
+            this.clearAutoHideTimer();
+            this.stopAutoHide();
+        });
+        
+        // 鼠标离开播放器区域
+        this.musicPlayer.addEventListener('mouseleave', () => {
+            this.isUserInteracting = false;
+            // 延迟3秒后开始自动隐藏
+            this.resetAutoHideTimer();
+        });
+        
+        // 点击播放器时重置定时器
+        this.musicPlayer.addEventListener('click', () => {
+            this.resetAutoHideTimer();
+        });
+    }
+    
+    // 显示音乐播放器
+    showMusicPlayer() {
+        this.musicPlayer.classList.remove('hidden');
+        this.musicPlayer.classList.add('show');
+        this.stopAutoHide();
+        this.resetAutoHideTimer();
+    }
+    
+    // 隐藏音乐播放器
+    hideMusicPlayer() {
+        this.musicPlayer.classList.add('hidden');
+        this.musicPlayer.classList.remove('show', 'auto-hide');
+        this.clearAutoHideTimer();
+        
+        // 停止播放
+        this.stopMusic();
+        this.currentMusic = null;
+    }
+    
+    // 开始自动隐藏
+    startAutoHide() {
+        if (!this.isUserInteracting && !this.musicPlayer.classList.contains('hidden')) {
+            this.musicPlayer.classList.add('auto-hide');
+        }
+    }
+    
+    // 停止自动隐藏
+    stopAutoHide() {
+        this.musicPlayer.classList.remove('auto-hide');
+    }
+    
+    // 重置自动隐藏定时器
+    resetAutoHideTimer() {
+        this.clearAutoHideTimer();
+        
+        // 如果正在播放音乐，10秒后开始自动隐藏
+        // 如果没有播放音乐，5秒后开始自动隐藏
+        const delay = this.isPlaying ? 10000 : 5000;
+        
+        this.autoHideTimer = setTimeout(() => {
+            if (!this.isUserInteracting) {
+                this.startAutoHide();
+            }
+        }, delay);
+    }
+    
+    // 清除自动隐藏定时器
+    clearAutoHideTimer() {
+        if (this.autoHideTimer) {
+            clearTimeout(this.autoHideTimer);
+            this.autoHideTimer = null;
+        }
+    }
+    
+    // === 自动播放相关方法 ===
+    
+    // 设置用户交互检测
+    setupUserInteractionDetection() {
+        const events = ['click', 'keydown', 'touchstart', 'mousedown'];
+        
+        const enableAutoPlay = () => {
+            this.hasUserInteracted = true;
+            console.log('用户已交互，启用自动播放');
+            
+            // 如果有待播放的音乐，立即播放
+            if (this.pendingPlay) {
+                console.log('播放待播放的音乐:', this.pendingPlay.name);
+                this.tryAutoPlay();
+                this.pendingPlay = null;
+            }
+            
+            // 移除事件监听器，不再需要
+            events.forEach(event => {
+                document.removeEventListener(event, enableAutoPlay, { passive: true });
+            });
+        };
+        
+        // 添加事件监听器
+        events.forEach(event => {
+            document.addEventListener(event, enableAutoPlay, { passive: true });
+        });
+    }
+    
+    // 尝试自动播放
+    tryAutoPlay() {
+        if (!this.audioPlayer.src) {
+            console.warn('没有音频源，无法播放');
+            return;
+        }
+        
+        // 先尝试静音播放来检测是否可以自动播放
+        const originalVolume = this.audioPlayer.volume;
+        this.audioPlayer.volume = 0;
+        
+        this.audioPlayer.play().then(() => {
+            // 静音播放成功，恢复音量并正常播放
+            this.audioPlayer.pause();
+            this.audioPlayer.volume = originalVolume;
+            this.audioPlayer.currentTime = 0;
+            
+            return this.audioPlayer.play();
+        }).then(() => {
+            // 播放成功
+            this.isPlaying = true;
+            this.updatePlayButton();
+            this.musicPlayer.classList.add('playing');
+            console.log('自动播放成功');
+        }).catch(error => {
+            // 播放失败，恢复音量
+            this.audioPlayer.volume = originalVolume;
+            console.error('自动播放失败:', error);
+            
+            // 检测失败原因
+            if (error.name === 'NotAllowedError') {
+                this.showError('需要用户交互才能播放音乐，请点击播放按钮');
+                this.addPlayButtonPrompt();
+            } else if (error.name === 'NotSupportedError') {
+                this.showError('音频格式不支持或文件损坏');
+            } else {
+                this.showError('播放失败，请检查网络连接');
+            }
+        });
+    }
+    
+    // 添加播放按钮提示效果
+    addPlayButtonPrompt() {
+        this.playPauseBtn.style.animation = 'pulse 1s infinite';
+        this.playPauseBtn.style.boxShadow = '0 0 20px rgba(255, 215, 0, 0.8)';
+        
+        // 5秒后移除提示效果
+        setTimeout(() => {
+            this.playPauseBtn.style.animation = '';
+            this.playPauseBtn.style.boxShadow = '';
+        }, 5000);
     }
 }
 
