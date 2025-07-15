@@ -27,5 +27,15 @@ module.exports = {
     ROOM_TYPES: {
         NORMAL: 'normal',
         AI: 'ai'
-    }
+    },
+    
+    // 音乐相关配置
+    MUSIC_API: {
+        URL: 'https://api.vvhan.com/api/wyMusic/%E7%83%AD%E6%AD%8C%E6%A6%9C?type=json',
+        TIMEOUT: 10000, // 10秒超时
+        USER_AGENT: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    },
+    
+    // 音乐命令
+    MUSIC_COMMAND: '/music'
 };

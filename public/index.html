@@ -65,6 +65,38 @@
                         <div id="messages"></div>
                     </div>
                     
+                    <!-- 音乐播放器 -->
+                    <div id="music-player" class="music-player hidden">
+                        <div class="music-info">
+                            <div class="music-cover">
+                                <img id="music-cover-img" src="" alt="专辑封面">
+                                <div class="music-cover-placeholder">🎵</div>
+                            </div>
+                            <div class="music-details">
+                                <div class="music-title" id="music-title">暂无音乐</div>
+                                <div class="music-artist" id="music-artist">发送 /music 开始播放</div>
+                            </div>
+                        </div>
+                        <div class="music-controls">
+                            <button id="play-pause-btn" class="control-btn">
+                                <span class="play-icon">▶</span>
+                                <span class="pause-icon hidden">⏸</span>
+                            </button>
+                            <div class="progress-container">
+                                <div class="progress-bar">
+                                    <div id="progress-fill" class="progress-fill"></div>
+                                </div>
+                                <div class="time-info">
+                                    <span id="current-time">0:00</span>
+                                    <span>/</span>
+                                    <span id="duration">0:00</span>
+                                </div>
+                            </div>
+                            <button id="volume-btn" class="control-btn">🔊</button>
+                        </div>
+                        <audio id="audio-player" preload="metadata"></audio>
+                    </div>
+                    
                     <div class="message-input-container">
                         <input type="text" id="message-input" placeholder="输入消息..." maxlength="200">
                         <button id="send-btn" class="btn primary">发送</button>

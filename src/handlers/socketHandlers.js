@@ -4,7 +4,8 @@ const {
     MAX_MESSAGE_LENGTH,
     MAX_USERS_PER_ROOM,
     ROOM_TYPES,
-    MESSAGE_TYPES
+    MESSAGE_TYPES,
+    MUSIC_COMMAND
 } = require('../config/constants');
 const MessageUtils = require('../utils/messageUtils');
 
@@ -12,10 +13,11 @@ const MessageUtils = require('../utils/messageUtils');
  * Socket事件处理器
  */
 class SocketHandlers {
-    constructor(roomManager, userManager, aiHandler) {
+    constructor(roomManager, userManager, aiHandler, musicHandler) {
         this.roomManager = roomManager;
         this.userManager = userManager;
         this.aiHandler = aiHandler;
+        this.musicHandler = musicHandler;
     }
 
     /**
@@ -146,8 +148,16 @@ class SocketHandlers {
             return;
         }
         
+        const trimmedMessage = message.trim();
+        
+        // 检查是否是音乐命令
+        if (trimmedMessage === MUSIC_COMMAND) {
+            this.musicHandler.handleMusicRequest(user.roomName, user.username, io);
+            return;
+        }
+        
         // 广播消息到房间内所有用户
-        const formattedMessage = MessageUtils.formatMessage(user.username, message.trim(), MESSAGE_TYPES.USER);
+        const formattedMessage = MessageUtils.formatMessage(user.username, trimmedMessage, MESSAGE_TYPES.USER);
         io.to(user.roomName).emit('message', formattedMessage);
         
         // 将消息存储到房间历史记录中
@@ -157,9 +167,9 @@ class SocketHandlers {
         
         // 如果是AI聊天室且消息以/model开头，调用AI处理
         const room = this.roomManager.getRoom(user.roomName);
-        if (room && room.type === ROOM_TYPES.AI && message.trim().startsWith('/model ')) {
+        if (room && room.type === ROOM_TYPES.AI && trimmedMessage.startsWith('/model ')) {
             // 提取真正的消息内容（去掉/model前缀）
-            const aiMessage = message.trim().substring(7); // 去掉'/model '（7个字符）
+            const aiMessage = trimmedMessage.substring(7); // 去掉'/model '（7个字符）
             if (aiMessage.length > 0) {
                 this.aiHandler.handleAIResponse(user.roomName, aiMessage, io);
             }

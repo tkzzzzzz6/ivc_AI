@@ -26,11 +26,27 @@ class ChatRoom {
         this.roomUsersCountDisplay = document.getElementById('room-users-count');
         this.notificationContainer = document.getElementById('notification');
 
+        // 音乐播放器DOM元素
+        this.musicPlayer = document.getElementById('music-player');
+        this.musicTitle = document.getElementById('music-title');
+        this.musicArtist = document.getElementById('music-artist');
+        this.musicCoverImg = document.getElementById('music-cover-img');
+        this.playPauseBtn = document.getElementById('play-pause-btn');
+        this.progressBar = document.querySelector('.progress-bar');
+        this.progressFill = document.getElementById('progress-fill');
+        this.currentTimeDisplay = document.getElementById('current-time');
+        this.durationDisplay = document.getElementById('duration');
+        this.volumeBtn = document.getElementById('volume-btn');
+        this.audioPlayer = document.getElementById('audio-player');
+
         // 绑定事件
         this.bindEvents();
         
         // 初始化Socket.IO连接
         this.initSocket();
+        
+        // 初始化音乐播放器
+        this.initMusicPlayer();
     }
 
     bindEvents() {
@@ -63,6 +79,9 @@ class ChatRoom {
                 e.preventDefault();
             }
         });
+        
+        // 音乐播放器事件
+        this.bindMusicEvents();
     }
 
     initSocket() {
@@ -142,6 +161,16 @@ class ChatRoom {
         // 接收房间通知
         this.socket.on('room-notification', (data) => {
             this.showRoomNotification(data);
+        });
+
+        // 音乐播放事件
+        this.socket.on('music-play', (musicData) => {
+            this.playMusic(musicData);
+        });
+
+        // 音乐停止事件
+        this.socket.on('music-stop', () => {
+            this.stopMusic();
         });
     }
 
@@ -437,6 +466,191 @@ class ChatRoom {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    // 音乐播放器初始化
+    initMusicPlayer() {
+        // 音乐播放器状态
+        this.isPlaying = false;
+        this.isMuted = false;
+        this.currentMusic = null;
+        
+        // 显示音乐播放器（但初始状态为空）
+        this.musicPlayer.classList.remove('hidden');
+    }
+
+    // 绑定音乐播放器事件
+    bindMusicEvents() {
+        // 播放/暂停按钮
+        this.playPauseBtn.addEventListener('click', () => {
+            this.togglePlay();
+        });
+
+        // 进度条点击
+        this.progressBar.addEventListener('click', (e) => {
+            const rect = this.progressBar.getBoundingClientRect();
+            const percent = (e.clientX - rect.left) / rect.width;
+            this.seekTo(percent);
+        });
+
+        // 音量按钮
+        this.volumeBtn.addEventListener('click', () => {
+            this.toggleMute();
+        });
+
+        // 音频事件
+        this.audioPlayer.addEventListener('loadedmetadata', () => {
+            this.updateDuration();
+        });
+
+        this.audioPlayer.addEventListener('timeupdate', () => {
+            this.updateProgress();
+        });
+
+        this.audioPlayer.addEventListener('ended', () => {
+            this.onMusicEnded();
+        });
+
+        this.audioPlayer.addEventListener('error', (e) => {
+            console.error('音频播放错误:', e);
+            this.showError('音频播放失败');
+        });
+    }
+
+    // 播放音乐
+    playMusic(musicData) {
+        this.currentMusic = musicData;
+        
+        // 更新界面
+        this.musicTitle.textContent = musicData.name || '未知歌曲';
+        this.musicArtist.textContent = musicData.artist || '未知艺术家';
+        
+        // 更新封面
+        if (musicData.cover) {
+            this.musicCoverImg.src = musicData.cover;
+            this.musicCoverImg.style.display = 'block';
+            this.musicCoverImg.parentElement.querySelector('.music-cover-placeholder').style.display = 'none';
+        } else {
+            this.musicCoverImg.style.display = 'none';
+            this.musicCoverImg.parentElement.querySelector('.music-cover-placeholder').style.display = 'flex';
+        }
+        
+        // 设置音频源
+        this.audioPlayer.src = musicData.url;
+        
+        // 自动播放
+        this.audioPlayer.play().then(() => {
+            this.isPlaying = true;
+            this.updatePlayButton();
+            this.musicPlayer.classList.add('playing');
+        }).catch(error => {
+            console.error('自动播放失败:', error);
+            this.showError('自动播放失败，请手动点击播放');
+        });
+    }
+
+    // 切换播放/暂停
+    togglePlay() {
+        if (!this.audioPlayer.src) return;
+        
+        if (this.isPlaying) {
+            this.audioPlayer.pause();
+            this.isPlaying = false;
+            this.musicPlayer.classList.remove('playing');
+        } else {
+            this.audioPlayer.play().then(() => {
+                this.isPlaying = true;
+                this.musicPlayer.classList.add('playing');
+            }).catch(error => {
+                console.error('播放失败:', error);
+                this.showError('播放失败');
+            });
+        }
+        
+        this.updatePlayButton();
+    }
+
+    // 更新播放按钮状态
+    updatePlayButton() {
+        const playIcon = this.playPauseBtn.querySelector('.play-icon');
+        const pauseIcon = this.playPauseBtn.querySelector('.pause-icon');
+        
+        if (this.isPlaying) {
+            playIcon.classList.add('hidden');
+            pauseIcon.classList.remove('hidden');
+        } else {
+            playIcon.classList.remove('hidden');
+            pauseIcon.classList.add('hidden');
+        }
+    }
+
+    // 跳转到指定位置
+    seekTo(percent) {
+        if (!this.audioPlayer.duration) return;
+        
+        this.audioPlayer.currentTime = this.audioPlayer.duration * percent;
+    }
+
+    // 切换静音
+    toggleMute() {
+        this.isMuted = !this.isMuted;
+        this.audioPlayer.muted = this.isMuted;
+        
+        this.volumeBtn.textContent = this.isMuted ? '🔇' : '🔊';
+    }
+
+    // 更新播放进度
+    updateProgress() {
+        if (!this.audioPlayer.duration) return;
+        
+        const percent = (this.audioPlayer.currentTime / this.audioPlayer.duration) * 100;
+        this.progressFill.style.width = percent + '%';
+        
+        this.currentTimeDisplay.textContent = this.formatTime(this.audioPlayer.currentTime);
+    }
+
+    // 更新总时长
+    updateDuration() {
+        this.durationDisplay.textContent = this.formatTime(this.audioPlayer.duration);
+    }
+
+    // 格式化时间
+    formatTime(seconds) {
+        if (!seconds || isNaN(seconds)) return '0:00';
+        
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = Math.floor(seconds % 60);
+        return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+    }
+
+    // 音乐播放结束
+    onMusicEnded() {
+        this.isPlaying = false;
+        this.updatePlayButton();
+        this.musicPlayer.classList.remove('playing');
+        this.progressFill.style.width = '0%';
+        this.currentTimeDisplay.textContent = '0:00';
+    }
+
+    // 停止音乐
+    stopMusic() {
+        this.audioPlayer.pause();
+        this.audioPlayer.currentTime = 0;
+        this.isPlaying = false;
+        this.updatePlayButton();
+        this.musicPlayer.classList.remove('playing');
+        this.progressFill.style.width = '0%';
+        this.currentTimeDisplay.textContent = '0:00';
+    }
+
+    // 显示错误消息
+    showError(message) {
+        // 使用现有的通知系统显示错误
+        if (this.showNotification) {
+            this.showNotification(message, 'error');
+        } else {
+            console.error(message);
+        }
     }
 }
 

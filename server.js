@@ -7,6 +7,7 @@ const { ROOM_CLEANUP_INTERVAL } = require('./src/config/constants');
 const RoomManager = require('./src/managers/roomManager');
 const UserManager = require('./src/managers/userManager');
 const AIHandler = require('./src/handlers/aiHandler');
+const MusicHandler = require('./src/handlers/musicHandler');
 const SocketHandlers = require('./src/handlers/socketHandlers');
 
 // 创建Express应用和服务器
@@ -21,7 +22,8 @@ app.use(express.static('public'));
 const roomManager = new RoomManager();
 const userManager = new UserManager(roomManager);
 const aiHandler = new AIHandler(roomManager);
-const socketHandlers = new SocketHandlers(roomManager, userManager, aiHandler);
+const musicHandler = new MusicHandler(roomManager);
+const socketHandlers = new SocketHandlers(roomManager, userManager, aiHandler, musicHandler);
 
 // Socket.IO 连接处理
 io.on('connection', (socket) => {
