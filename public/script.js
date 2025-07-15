@@ -18,6 +18,7 @@ class ChatRoom {
         this.sendBtn = document.getElementById('send-btn');
         this.leaveBtn = document.getElementById('leave-btn');
         this.messagesContainer = document.getElementById('messages');
+        this.scrollContainer = document.querySelector('.messages-container');
         this.usersListContainer = document.getElementById('users-list');
         this.usernameDisplay = document.getElementById('username-display');
         this.userCountDisplay = document.getElementById('user-count');
@@ -414,10 +415,12 @@ class ChatRoom {
     scrollToBottom() {
         // 使用requestAnimationFrame确保DOM更新后再滚动
         requestAnimationFrame(() => {
-            // 方法1：使用scrollTop（兼容性好）
-            this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
+            // 滚动外层容器（.messages-container）
+            if (this.scrollContainer) {
+                this.scrollContainer.scrollTop = this.scrollContainer.scrollHeight;
+            }
             
-            // 方法2：如果方法1不工作，使用scrollIntoView（现代浏览器）
+            // 备用方案：滚动最新的消息到视图中
             const messages = this.messagesContainer.children;
             if (messages.length > 0) {
                 const lastMessage = messages[messages.length - 1];
