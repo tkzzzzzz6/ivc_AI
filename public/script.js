@@ -49,6 +49,13 @@ class ChatRoom {
         });
         this.leaveBtn.addEventListener('click', () => this.leaveRoom());
 
+        // 房间类型选择事件
+        document.querySelectorAll('input[name="room-type"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                this.handleRoomTypeChange(e.target.value);
+            });
+        });
+
         // 防止表单默认提交
         document.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
@@ -99,6 +106,11 @@ class ChatRoom {
             this.addMessage(data);
         });
 
+        // 接收历史消息
+        this.socket.on('history-messages', (messages) => {
+            this.loadHistoryMessages(messages);
+        });
+
         // 用户列表更新
         this.socket.on('users-update', (users) => {
             this.updateUsersList(users);
@@ -108,19 +120,47 @@ class ChatRoom {
         this.socket.on('error', (data) => {
             this.showNotification(data.message, 'error');
         });
+
+        // 接收全局统计信息
+        this.socket.on('global-stats', (stats) => {
+            this.updateGlobalStats(stats);
+        });
+
+        // 接收房间通知
+        this.socket.on('room-notification', (data) => {
+            this.showRoomNotification(data);
+        });
     }
 
     joinRoom() {
         const username = this.usernameInput.value.trim();
         const roomName = this.roomNameInput.value.trim();
+        const roomType = document.querySelector('input[name="room-type"]:checked').value;
 
-        if (!username || !roomName) {
-            this.showNotification('请输入用户名和房间名', 'error');
+        if (!username) {
+            this.showNotification('请输入用户名', 'error');
             return;
         }
 
         if (username.length > 20) {
             this.showNotification('用户名不能超过20个字符', 'error');
+            return;
+        }
+
+        // AI聊天室特殊处理
+        if (roomType === 'ai') {
+            this.joinBtn.disabled = true;
+            this.socket.emit('join-room', { 
+                username, 
+                roomName: 'AI聊天室', 
+                roomType: 'ai' 
+            });
+            return;
+        }
+
+        // 普通聊天室验证
+        if (!roomName) {
+            this.showNotification('请输入房间名称', 'error');
             return;
         }
 
@@ -130,12 +170,30 @@ class ChatRoom {
         }
 
         this.joinBtn.disabled = true;
-        this.socket.emit('join-room', { username, roomName });
+        this.socket.emit('join-room', { username, roomName, roomType: 'normal' });
     }
 
     leaveRoom() {
         if (confirm('确定要离开房间吗？')) {
             this.socket.emit('leave-room');
+        }
+    }
+
+    handleRoomTypeChange(roomType) {
+        const roomNameInput = this.roomNameInput;
+        const roomNameLabel = document.querySelector('label[for="room-name"]');
+        
+        if (roomType === 'ai') {
+            roomNameInput.disabled = true;
+            roomNameInput.placeholder = 'AI聊天室（固定）';
+            roomNameInput.value = '';
+            roomNameLabel.textContent = 'AI聊天室（无人数限制）:';
+            roomNameLabel.style.color = 'var(--warning-color)';
+        } else {
+            roomNameInput.disabled = false;
+            roomNameInput.placeholder = '输入房间名称';
+            roomNameLabel.textContent = '选择或创建房间:';
+            roomNameLabel.style.color = 'var(--text-color)';
         }
     }
 
@@ -174,6 +232,48 @@ class ChatRoom {
         this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
     }
 
+    loadHistoryMessages(messages) {
+        // 清空现有消息
+        this.messagesContainer.innerHTML = '';
+        
+        // 如果有历史消息，显示分隔线
+        if (messages.length > 0) {
+            const historyDivider = document.createElement('div');
+            historyDivider.className = 'history-divider';
+            historyDivider.innerHTML = '<span>📜 历史消息</span>';
+            this.messagesContainer.appendChild(historyDivider);
+        }
+        
+        // 显示历史消息
+        messages.forEach(message => {
+            const messageElement = document.createElement('div');
+            messageElement.className = `message ${message.type} history`;
+            
+            const timestamp = new Date(message.timestamp).toLocaleTimeString();
+            
+            messageElement.innerHTML = `
+                <div class="message-header">
+                    <span class="message-user">${message.username}</span>
+                    <span class="message-time">${timestamp}</span>
+                </div>
+                <div class="message-content">${this.escapeHtml(message.message)}</div>
+            `;
+            
+            this.messagesContainer.appendChild(messageElement);
+        });
+        
+        // 如果有历史消息，添加分隔线
+        if (messages.length > 0) {
+            const currentDivider = document.createElement('div');
+            currentDivider.className = 'history-divider';
+            currentDivider.innerHTML = '<span>🕐 当前消息</span>';
+            this.messagesContainer.appendChild(currentDivider);
+        }
+        
+        // 滚动到底部
+        this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
+    }
+
     updateUsersList(users) {
         this.usersListContainer.innerHTML = '';
         
@@ -187,9 +287,23 @@ class ChatRoom {
             this.usersListContainer.appendChild(userElement);
         });
 
-        // 更新用户数量显示
-        this.userCountDisplay.textContent = `在线: ${users.length}`;
-        this.roomUsersCountDisplay.textContent = `用户数: ${users.length}/10`;
+        // 更新当前房间用户数量显示
+        const isAIRoom = this.currentRoom === 'AI聊天室';
+        if (isAIRoom) {
+            this.roomUsersCountDisplay.textContent = `用户数: ${users.length} (无限制)`;
+            this.roomUsersCountDisplay.style.color = 'var(--warning-color)';
+        } else {
+            this.roomUsersCountDisplay.textContent = `用户数: ${users.length}/10`;
+            this.roomUsersCountDisplay.style.color = 'var(--text-color)';
+        }
+    }
+
+    updateGlobalStats(stats) {
+        // 更新全局在线用户数显示
+        this.userCountDisplay.textContent = `在线: ${stats.totalUsers}`;
+        
+        console.log(`📊 更新全局统计: 总用户数=${stats.totalUsers}, 总房间数=${stats.totalRooms}`);
+        console.log(`📊 更新显示元素:`, this.userCountDisplay);
     }
 
     showLoginScreen() {
@@ -199,7 +313,8 @@ class ChatRoom {
         this.roomNameInput.value = '';
         this.joinBtn.disabled = false;
         this.usernameDisplay.textContent = '游客';
-        this.userCountDisplay.textContent = '在线: 0';
+        // 不要强制设置用户数为0，让服务器的统计信息来更新
+        // this.userCountDisplay.textContent = '在线: 0';
         this.messagesContainer.innerHTML = '';
         this.usersListContainer.innerHTML = '';
     }
@@ -228,6 +343,60 @@ class ChatRoom {
         }, 100);
     }
 
+    showRoomNotification(data) {
+        // 只在聊天室界面显示房间通知
+        if (this.chatScreen.classList.contains('hidden')) {
+            return;
+        }
+
+        const notification = document.createElement('div');
+        notification.className = 'room-notification';
+        
+        const iconClass = data.type === 'join' ? 'join' : 'leave';
+        const icon = data.type === 'join' ? '🎉' : '👋';
+        const actionText = data.type === 'join' ? '加入房间' : '退出房间';
+        
+        notification.innerHTML = `
+            <button class="room-notification-close">×</button>
+            <div class="room-notification-content">
+                <div class="room-notification-icon ${iconClass}">${icon}</div>
+                <div class="room-notification-text">
+                    <span class="room-notification-username">${this.escapeHtml(data.username)}</span>
+                    ${actionText}
+                </div>
+            </div>
+        `;
+
+        // 添加到页面
+        document.body.appendChild(notification);
+
+        // 点击关闭功能
+        const closeBtn = notification.querySelector('.room-notification-close');
+        const closeNotification = () => {
+            notification.classList.add('closing');
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 300);
+        };
+
+        closeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeNotification();
+        });
+
+        // 点击整个通知也可以关闭
+        notification.addEventListener('click', closeNotification);
+
+        // 3秒后自动关闭
+        setTimeout(() => {
+            if (notification.parentNode) {
+                closeNotification();
+            }
+        }, 3000);
+    }
+
     escapeHtml(text) {
         const div = document.createElement('div');
         div.textContent = text;
@@ -237,7 +406,7 @@ class ChatRoom {
 
 // 页面加载完成后初始化聊天室
 document.addEventListener('DOMContentLoaded', () => {
-    new ChatRoom();
+    window.chatRoom = new ChatRoom();
 });
 
 // 页面关闭前确认
@@ -245,6 +414,7 @@ window.addEventListener('beforeunload', (event) => {
     if (window.chatRoom && window.chatRoom.currentRoom) {
         event.preventDefault();
         event.returnValue = '确定要离开聊天室吗？';
+        return '确定要离开聊天室吗？';
     }
 });
 

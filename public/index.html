@@ -28,6 +28,20 @@
                     <label for="room-name">选择或创建房间:</label>
                     <input type="text" id="room-name" placeholder="输入房间名称" maxlength="30">
                 </div>
+                <div class="form-group">
+                    <div class="room-type-selector">
+                        <label class="radio-option">
+                            <input type="radio" name="room-type" value="normal" checked>
+                            <span class="radio-custom"></span>
+                            <span class="radio-label">🌱 普通聊天室</span>
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="room-type" value="ai">
+                            <span class="radio-custom"></span>
+                            <span class="radio-label">🤖 AI聊天室</span>
+                        </label>
+                    </div>
+                </div>
                 <button id="join-btn" class="btn primary">加入聊天室</button>
             </div>
         </div>
