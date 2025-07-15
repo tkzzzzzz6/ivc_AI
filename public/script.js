@@ -172,6 +172,16 @@ class ChatRoom {
         this.socket.on('music-stop', () => {
             this.stopMusic();
         });
+
+        // 音乐同步事件
+        this.socket.on('music-sync', (syncData) => {
+            this.syncMusicState(syncData);
+        });
+
+        // 音乐播放/暂停切换事件
+        this.socket.on('music-toggle', (toggleData) => {
+            this.handleMusicToggle(toggleData);
+        });
     }
 
     joinRoom() {
@@ -474,9 +484,10 @@ class ChatRoom {
         this.isPlaying = false;
         this.isMuted = false;
         this.currentMusic = null;
+        this.isServerControlled = false; // 标记是否被服务器控制
         
-        // 显示音乐播放器（但初始状态为空）
-        this.musicPlayer.classList.remove('hidden');
+        // 播放器初始状态为隐藏，只有调用/music后才显示
+        this.musicPlayer.classList.add('hidden');
     }
 
     // 绑定音乐播放器事件
@@ -520,6 +531,7 @@ class ChatRoom {
     // 播放音乐
     playMusic(musicData) {
         this.currentMusic = musicData;
+        this.isServerControlled = true;
         
         // 更新界面
         this.musicTitle.textContent = musicData.name || '未知歌曲';
@@ -538,20 +550,42 @@ class ChatRoom {
         // 设置音频源
         this.audioPlayer.src = musicData.url;
         
-        // 自动播放
-        this.audioPlayer.play().then(() => {
-            this.isPlaying = true;
-            this.updatePlayButton();
-            this.musicPlayer.classList.add('playing');
-        }).catch(error => {
-            console.error('自动播放失败:', error);
-            this.showError('自动播放失败，请手动点击播放');
-        });
+        // 如果有当前播放时间，跳转到指定位置
+        if (musicData.currentTime && musicData.currentTime > 0) {
+            this.audioPlayer.addEventListener('loadedmetadata', () => {
+                this.audioPlayer.currentTime = musicData.currentTime;
+                if (musicData.isPlaying) {
+                    this.audioPlayer.play().then(() => {
+                        this.isPlaying = true;
+                        this.updatePlayButton();
+                        this.musicPlayer.classList.add('playing');
+                    }).catch(error => {
+                        console.error('同步播放失败:', error);
+                    });
+                }
+            }, { once: true });
+        } else {
+            // 新音乐自动播放
+            this.audioPlayer.play().then(() => {
+                this.isPlaying = true;
+                this.updatePlayButton();
+                this.musicPlayer.classList.add('playing');
+            }).catch(error => {
+                console.error('自动播放失败:', error);
+                this.showError('自动播放失败，请手动点击播放');
+            });
+        }
     }
 
     // 切换播放/暂停
     togglePlay() {
         if (!this.audioPlayer.src) return;
+        
+        // 如果是服务器控制的音乐，发送暂停/播放命令到服务器
+        if (this.isServerControlled) {
+            this.sendMessageToServer(this.isPlaying ? '/pause' : '/play');
+            return;
+        }
         
         if (this.isPlaying) {
             this.audioPlayer.pause();
@@ -650,6 +684,64 @@ class ChatRoom {
             this.showNotification(message, 'error');
         } else {
             console.error(message);
+        }
+    }
+
+    // 同步音乐状态
+    syncMusicState(syncData) {
+        if (!this.currentMusic || !this.isServerControlled) return;
+        
+        // 同步播放时间
+        const timeDiff = Math.abs(this.audioPlayer.currentTime - syncData.currentTime);
+        if (timeDiff > 2) { // 如果时间差超过2秒，强制同步
+            this.audioPlayer.currentTime = syncData.currentTime;
+        }
+        
+        // 同步播放状态
+        if (syncData.isPlaying !== this.isPlaying) {
+            if (syncData.isPlaying) {
+                this.audioPlayer.play().catch(error => {
+                    console.error('同步播放失败:', error);
+                });
+            } else {
+                this.audioPlayer.pause();
+            }
+            this.isPlaying = syncData.isPlaying;
+            this.updatePlayButton();
+            
+            if (this.isPlaying) {
+                this.musicPlayer.classList.add('playing');
+            } else {
+                this.musicPlayer.classList.remove('playing');
+            }
+        }
+    }
+
+    // 处理音乐播放/暂停切换
+    handleMusicToggle(toggleData) {
+        if (!this.currentMusic) return;
+        
+        this.isPlaying = toggleData.isPlaying;
+        
+        if (toggleData.isPlaying) {
+            this.audioPlayer.currentTime = toggleData.currentTime;
+            this.audioPlayer.play().then(() => {
+                this.musicPlayer.classList.add('playing');
+            }).catch(error => {
+                console.error('切换播放失败:', error);
+            });
+        } else {
+            this.audioPlayer.pause();
+            this.musicPlayer.classList.remove('playing');
+        }
+        
+        this.updatePlayButton();
+    }
+
+    // 发送消息的辅助方法
+    sendMessageToServer(message) {
+        if (this.socket && this.currentRoom) {
+            this.socket.emit('send-message', { message: message });
         }
     }
 }

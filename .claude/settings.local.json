@@ -8,7 +8,8 @@
       "Bash(rm:*)",
       "Bash(npm run build)",
       "Bash(npm install:*)",
-      "Bash(timeout 15s npm start)"
+      "Bash(timeout 15s npm start)",
+      "Bash(curl:*)"
     ],
     "deny": []
   }

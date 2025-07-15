@@ -119,6 +119,16 @@ class SocketHandlers {
                 socket.emit('message', aiWelcomeMessage);
             }
             
+            // 发送当前房间的音乐状态（如果有）
+            const musicState = this.musicHandler.getRoomMusicState(user.roomName);
+            if (musicState) {
+                socket.emit('music-play', musicState);
+                socket.emit('music-sync', {
+                    currentTime: musicState.currentTime,
+                    isPlaying: musicState.isPlaying
+                });
+            }
+            
             // 广播全局统计信息更新
             this.broadcastGlobalStats(io);
         } else {
@@ -141,18 +151,25 @@ class SocketHandlers {
         
         const { message } = data;
         
-        // 验证消息
-        const messageValidation = MessageUtils.validateMessage(message, MAX_MESSAGE_LENGTH);
+        // 先trim消息，然后验证
+        const trimmedMessage = message ? message.trim() : '';
+        
+        // 验证trimmed后的消息
+        const messageValidation = MessageUtils.validateMessage(trimmedMessage, MAX_MESSAGE_LENGTH);
         if (!messageValidation.valid) {
             socket.emit('error', { message: messageValidation.error });
             return;
         }
         
-        const trimmedMessage = message.trim();
-        
         // 检查是否是音乐命令
         if (trimmedMessage === MUSIC_COMMAND) {
             this.musicHandler.handleMusicRequest(user.roomName, user.username, io);
+            return;
+        }
+        
+        // 检查是否是音乐控制命令
+        if (trimmedMessage === '/pause' || trimmedMessage === '/play') {
+            this.musicHandler.handleMusicToggle(user.roomName, user.username, io);
             return;
         }
         
@@ -163,7 +180,7 @@ class SocketHandlers {
         // 将消息存储到房间历史记录中
         this.roomManager.addMessageToRoom(user.roomName, formattedMessage);
         
-        console.log(`消息来自 ${user.username} 在房间 ${user.roomName}: ${message}`);
+        console.log(`消息来自 ${user.username} 在房间 ${user.roomName}: ${trimmedMessage}`);
         
         // 如果是AI聊天室且消息以/model开头，调用AI处理
         const room = this.roomManager.getRoom(user.roomName);

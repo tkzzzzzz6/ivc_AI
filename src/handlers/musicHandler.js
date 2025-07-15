@@ -9,6 +9,7 @@ class MusicHandler {
     constructor(roomManager) {
         this.roomManager = roomManager;
         this.currentMusic = new Map(); // 存储每个房间当前播放的音乐
+        this.syncIntervals = new Map(); // 存储每个房间的同步定时器
     }
 
     /**
@@ -27,12 +28,24 @@ class MusicHandler {
             if (musicData && musicData.success) {
                 const musicInfo = musicData.info;
                 
-                // 存储当前房间播放的音乐
-                this.currentMusic.set(roomName, {
-                    ...musicInfo,
+                // 停止当前播放的音乐（如果有）
+                this.stopRoomMusic(roomName, io);
+                
+                // 存储当前房间播放的音乐状态
+                const musicState = {
+                    id: musicInfo.id,
+                    name: musicInfo.name,
+                    artist: musicInfo.auther,
+                    cover: musicInfo.pic_url || musicInfo.picUrl,
+                    url: musicInfo.url,
+                    requestUser: username,
                     startTime: Date.now(),
-                    requestUser: username
-                });
+                    isPlaying: true,
+                    currentTime: 0,
+                    duration: 0
+                };
+                
+                this.currentMusic.set(roomName, musicState);
                 
                 // 发送音乐播放消息
                 const musicMessage = MessageUtils.formatMessage(
@@ -43,17 +56,13 @@ class MusicHandler {
                 io.to(roomName).emit('message', musicMessage);
                 
                 // 广播音乐数据到房间所有用户
-                io.to(roomName).emit('music-play', {
-                    id: musicInfo.id,
-                    name: musicInfo.name,
-                    artist: musicInfo.auther,
-                    cover: musicInfo.picUrl,
-                    url: musicInfo.url,
-                    requestUser: username
-                });
+                io.to(roomName).emit('music-play', musicState);
                 
                 // 存储音乐消息到房间历史
                 this.roomManager.addMessageToRoom(roomName, musicMessage);
+                
+                // 启动同步定时器
+                this.startSyncTimer(roomName, io);
                 
                 console.log(`音乐播放成功: ${musicInfo.name} - ${musicInfo.auther}`);
                 
@@ -72,6 +81,118 @@ class MusicHandler {
             );
             io.to(roomName).emit('message', errorMessage);
         }
+    }
+
+    /**
+     * 启动音乐同步定时器
+     * @param {string} roomName - 房间名
+     * @param {object} io - Socket.IO实例
+     */
+    startSyncTimer(roomName, io) {
+        // 清除现有定时器
+        this.clearSyncTimer(roomName);
+        
+        // 每秒同步一次播放状态
+        const interval = setInterval(() => {
+            const musicState = this.currentMusic.get(roomName);
+            if (!musicState || !musicState.isPlaying) {
+                this.clearSyncTimer(roomName);
+                return;
+            }
+            
+            // 计算当前播放时间
+            const elapsed = (Date.now() - musicState.startTime) / 1000;
+            musicState.currentTime = elapsed;
+            
+            // 广播同步信息
+            io.to(roomName).emit('music-sync', {
+                currentTime: musicState.currentTime,
+                isPlaying: musicState.isPlaying
+            });
+            
+        }, 1000);
+        
+        this.syncIntervals.set(roomName, interval);
+    }
+
+    /**
+     * 清除同步定时器
+     * @param {string} roomName - 房间名
+     */
+    clearSyncTimer(roomName) {
+        const interval = this.syncIntervals.get(roomName);
+        if (interval) {
+            clearInterval(interval);
+            this.syncIntervals.delete(roomName);
+        }
+    }
+
+    /**
+     * 处理音乐播放/暂停切换
+     * @param {string} roomName - 房间名
+     * @param {string} username - 操作用户名
+     * @param {object} io - Socket.IO实例
+     */
+    handleMusicToggle(roomName, username, io) {
+        const musicState = this.currentMusic.get(roomName);
+        if (!musicState) return;
+        
+        musicState.isPlaying = !musicState.isPlaying;
+        
+        if (musicState.isPlaying) {
+            // 恢复播放时更新开始时间
+            musicState.startTime = Date.now() - (musicState.currentTime * 1000);
+            this.startSyncTimer(roomName, io);
+        } else {
+            // 暂停时停止同步定时器
+            this.clearSyncTimer(roomName);
+        }
+        
+        // 广播播放状态变化
+        io.to(roomName).emit('music-toggle', {
+            isPlaying: musicState.isPlaying,
+            currentTime: musicState.currentTime,
+            username: username
+        });
+        
+        // 发送系统消息
+        const action = musicState.isPlaying ? '继续播放' : '暂停了';
+        const toggleMessage = MessageUtils.formatMessage(
+            '🎵 音乐小助手', 
+            `${username} ${action}音乐`,
+            MESSAGE_TYPES.SYSTEM
+        );
+        io.to(roomName).emit('message', toggleMessage);
+    }
+
+    /**
+     * 停止房间音乐播放
+     * @param {string} roomName - 房间名
+     * @param {object} io - Socket.IO实例
+     */
+    stopRoomMusic(roomName, io) {
+        if (this.currentMusic.has(roomName)) {
+            this.clearSyncTimer(roomName);
+            this.currentMusic.delete(roomName);
+            io.to(roomName).emit('music-stop');
+        }
+    }
+
+    /**
+     * 获取房间当前音乐状态（用于新用户加入时同步）
+     * @param {string} roomName - 房间名
+     * @returns {object|null} 音乐状态
+     */
+    getRoomMusicState(roomName) {
+        const musicState = this.currentMusic.get(roomName);
+        if (!musicState) return null;
+        
+        // 更新当前播放时间
+        if (musicState.isPlaying) {
+            musicState.currentTime = (Date.now() - musicState.startTime) / 1000;
+        }
+        
+        return musicState;
     }
 
     /**
@@ -126,17 +247,14 @@ class MusicHandler {
      * @param {object} io - Socket.IO实例
      */
     stopMusic(roomName, io) {
-        if (this.currentMusic.has(roomName)) {
-            this.currentMusic.delete(roomName);
-            io.to(roomName).emit('music-stop');
-            
-            const stopMessage = MessageUtils.formatMessage(
-                '🎵 音乐小助手', 
-                '音乐播放已停止',
-                MESSAGE_TYPES.SYSTEM
-            );
-            io.to(roomName).emit('message', stopMessage);
-        }
+        this.stopRoomMusic(roomName, io);
+        
+        const stopMessage = MessageUtils.formatMessage(
+            '🎵 音乐小助手', 
+            '音乐播放已停止',
+            MESSAGE_TYPES.SYSTEM
+        );
+        io.to(roomName).emit('message', stopMessage);
     }
 
     /**
@@ -144,6 +262,7 @@ class MusicHandler {
      * @param {string} roomName - 房间名
      */
     clearRoomMusic(roomName) {
+        this.clearSyncTimer(roomName);
         this.currentMusic.delete(roomName);
     }
 

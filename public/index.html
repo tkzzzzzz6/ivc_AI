@@ -76,12 +76,18 @@
                                 <div class="music-title" id="music-title">暂无音乐</div>
                                 <div class="music-artist" id="music-artist">发送 /music 开始播放</div>
                             </div>
+                            <div class="music-actions">
+                                <button id="lyrics-btn" class="action-btn" title="显示歌词">📜</button>
+                                <button id="close-player-btn" class="action-btn" title="关闭播放器">❌</button>
+                            </div>
                         </div>
                         <div class="music-controls">
+                            <button id="prev-btn" class="control-btn">⏮</button>
                             <button id="play-pause-btn" class="control-btn">
                                 <span class="play-icon">▶</span>
                                 <span class="pause-icon hidden">⏸</span>
                             </button>
+                            <button id="next-btn" class="control-btn">⏭</button>
                             <div class="progress-container">
                                 <div class="progress-bar">
                                     <div id="progress-fill" class="progress-fill"></div>
@@ -93,6 +99,15 @@
                                 </div>
                             </div>
                             <button id="volume-btn" class="control-btn">🔊</button>
+                        </div>
+                        <div id="lyrics-panel" class="lyrics-panel hidden">
+                            <div class="lyrics-header">
+                                <h4>🎵 歌词</h4>
+                                <button id="close-lyrics-btn" class="close-btn">×</button>
+                            </div>
+                            <div id="lyrics-content" class="lyrics-content">
+                                <div class="lyrics-placeholder">暂无歌词信息</div>
+                            </div>
                         </div>
                         <audio id="audio-player" preload="metadata"></audio>
                     </div>

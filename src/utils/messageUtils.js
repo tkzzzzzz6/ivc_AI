@@ -22,12 +22,13 @@ class MessageUtils {
 
     /**
      * 验证消息输入
-     * @param {string} message - 消息内容
+     * @param {string} message - 消息内容（应该已经trim过）
      * @param {number} maxLength - 最大长度
      * @returns {object} 验证结果
      */
     static validateMessage(message, maxLength) {
-        if (!message || message.trim() === '') {
+        // 检查消息是否为空（假设传入的message已经被trim过）
+        if (!message || message === '') {
             return { valid: false, error: '消息不能为空' };
         }
         
