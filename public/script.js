@@ -241,7 +241,9 @@ class ChatRoom {
         `;
         
         this.messagesContainer.appendChild(messageElement);
-        this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
+        
+        // 确保自动滚动到最新消息
+        this.scrollToBottom();
     }
 
     loadHistoryMessages(messages) {
@@ -283,7 +285,7 @@ class ChatRoom {
         }
         
         // 滚动到底部
-        this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
+        this.scrollToBottom();
     }
 
     updateUsersList(users) {
@@ -407,6 +409,25 @@ class ChatRoom {
                 closeNotification();
             }
         }, 3000);
+    }
+
+    scrollToBottom() {
+        // 使用requestAnimationFrame确保DOM更新后再滚动
+        requestAnimationFrame(() => {
+            // 方法1：使用scrollTop（兼容性好）
+            this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
+            
+            // 方法2：如果方法1不工作，使用scrollIntoView（现代浏览器）
+            const messages = this.messagesContainer.children;
+            if (messages.length > 0) {
+                const lastMessage = messages[messages.length - 1];
+                lastMessage.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'end',
+                    inline: 'nearest'
+                });
+            }
+        });
     }
 
     escapeHtml(text) {
