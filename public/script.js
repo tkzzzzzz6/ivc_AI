@@ -85,6 +85,18 @@ class ChatRoom {
             this.currentRoom = data.roomName;
             this.showChatScreen();
             this.showNotification(`成功加入房间 "${data.roomName}"`, 'success');
+            
+            // 如果是AI聊天室，显示使用提示
+            if (data.roomName === 'AI聊天室') {
+                setTimeout(() => {
+                    this.addMessage({
+                        username: '🤖 系统提示',
+                        message: '欢迎来到AI聊天室！\n💬 正常聊天：直接发送消息\n🤖 AI对话：输入 /model + 你的问题\n\n例如：/model 你好，请介绍一下自己',
+                        timestamp: new Date().toISOString(),
+                        type: 'system'
+                    });
+                }, 500);
+            }
         });
 
         // 加入房间失败

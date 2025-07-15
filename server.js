@@ -397,9 +397,13 @@ io.on('connection', (socket) => {
         
         console.log(`消息来自 ${user.username} 在房间 ${user.roomName}: ${message}`);
         
-        // 如果是AI聊天室，调用AI处理
-        if (room && room.type === 'ai') {
-            handleAIResponse(user.roomName, message.trim());
+        // 如果是AI聊天室且消息以/model开头，调用AI处理
+        if (room && room.type === 'ai' && message.trim().startsWith('/model ')) {
+            // 提取真正的消息内容（去掉/model前缀）
+            const aiMessage = message.trim().substring(7); // 去掉'/model '（7个字符）
+            if (aiMessage.length > 0) {
+                handleAIResponse(user.roomName, aiMessage);
+            }
         }
     });
     
